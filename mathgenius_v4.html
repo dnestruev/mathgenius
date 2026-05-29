@@ -66,6 +66,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 .dot:nth-child(2){animation-delay:.22s}.dot:nth-child(3){animation-delay:.44s}
 @keyframes bop{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 
+.livecalc{position:relative}
+.livehead{display:flex;align-items:center;gap:7px;color:var(--text3);font-size:12px;margin:1px 0 6px;min-height:18px}
+.liveorb{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(26,115,232,.35);animation:pulse 1.2s infinite;flex-shrink:0}
+.livebar{height:2px;width:118px;max-width:45%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:220% 100%;animation:sweep 1s linear infinite;opacity:.75}
+.liveout{display:flex;flex-direction:column;gap:1px}
+.reveal{animation:stepin .22s ease-out both}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,115,232,.35)}70%{box-shadow:0 0 0 7px rgba(26,115,232,0)}100%{box-shadow:0 0 0 0 rgba(26,115,232,0)}}
+@keyframes sweep{0%{background-position:120% 0}100%{background-position:-120% 0}}
+@keyframes stepin{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.liveorb,.livebar,.reveal{animation:none}.reveal{opacity:1;transform:none}}
+
 #inputzone{padding:8px 14px 16px;border-top:1px solid var(--border)}
 #diffrow{display:flex;justify-content:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .db{padding:5px 13px;border-radius:var(--radius-pill);border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
@@ -177,7 +188,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 </div>
 
 <script>
-var diff='easy', hist=[], busy=false;
+var diff='easy', hist=[], busy=false, liveTimers=[];
 var DL={easy:'Начальная',medium:'Средняя',hard:'Старшая'};
 var TC={easy:'te',medium:'tm',hard:'th'};
 var userName='';
@@ -234,6 +245,8 @@ function kd(e){if(e.key==='Enter'){e.preventDefault();go();}}
 function upd(){document.getElementById('sndbtn').disabled=!document.getElementById('qi').value.trim()||busy;}
 
 function newChat(){
+  clearLiveTimers();
+  busy=false;
   document.getElementById('welcome').style.display='';
   document.getElementById('msglist').style.display='none';
   document.getElementById('msglist').innerHTML='';
@@ -284,6 +297,45 @@ function addBot(html,d){
   document.getElementById('msglist').appendChild(wrap);sc();
 }
 
+function clearLiveTimers(){
+  liveTimers.forEach(function(id){clearTimeout(id);});
+  liveTimers=[];
+}
+
+function later(fn,ms){
+  var id=setTimeout(function(){
+    liveTimers=liveTimers.filter(function(x){return x!==id;});
+    fn();
+  },ms);
+  liveTimers.push(id);
+}
+
+function addBotLive(html,d,done){
+  var wrap=document.createElement('div');wrap.className='mb';
+  wrap.innerHTML='<div class="mbav">М</div><div class="mbc livecalc"><span class="dottag '+TC[d]+'">'+DL[d]+'</span><div class="livehead"><span class="liveorb"></span><span class="livetxt">Разбираю запись…</span><span class="livebar"></span></div><div class="liveout"></div></div>';
+  var out=wrap.querySelector('.liveout'), status=wrap.querySelector('.livetxt'), bar=wrap.querySelector('.livebar'), orb=wrap.querySelector('.liveorb');
+  var tmp=document.createElement('div');tmp.innerHTML=html;
+  var chunks=Array.prototype.slice.call(tmp.childNodes).filter(function(n){return n.nodeType!==3||n.textContent.trim();});
+  document.getElementById('msglist').appendChild(wrap);sc();
+  if(!chunks.length){chunks=[document.createTextNode('Готово')];}
+  later(function(){status.textContent='Строю шаги решения…';},180);
+  chunks.forEach(function(node,i){
+    later(function(){
+      var item=node.cloneNode(true);
+      if(item.nodeType===1)item.classList.add('reveal');
+      else {var span=document.createElement('span');span.className='reveal';span.textContent=item.textContent;item=span;}
+      out.appendChild(item);sc();
+      status.textContent=i===chunks.length-1?'Почти готово…':'Шаг '+(i+1)+' из '+chunks.length;
+    },360+i*210);
+  });
+  later(function(){
+    status.textContent='Готово';
+    if(bar)bar.style.display='none';
+    if(orb)orb.style.animation='none';
+    if(done)done();
+  },420+chunks.length*210);
+}
+
 function sc(){var c=document.getElementById('chatzone');c.scrollTop=c.scrollHeight;}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -297,10 +349,9 @@ function go(){
   hist.push({q:q,diff:diff,t:t});
   addUser(q);addThink();
   var d=diff;
-  setTimeout(function(){
+  later(function(){
     removeThink();
-    addBot(solve(q,d),d);
-    busy=false;upd();
+    addBotLive(solve(q,d),d,function(){busy=false;upd();});
   },320);
 }
 
