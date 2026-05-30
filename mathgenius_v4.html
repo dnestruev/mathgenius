@@ -66,6 +66,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 .dot:nth-child(2){animation-delay:.22s}.dot:nth-child(3){animation-delay:.44s}
 @keyframes bop{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 
+.livecalc{position:relative}
+.livehead{display:flex;align-items:center;gap:7px;color:var(--text3);font-size:12px;margin:1px 0 6px;min-height:18px}
+.liveorb{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(26,115,232,.35);animation:pulse 1.2s infinite;flex-shrink:0}
+.livebar{height:2px;width:118px;max-width:45%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:220% 100%;animation:sweep 1s linear infinite;opacity:.75}
+.liveout{display:flex;flex-direction:column;gap:1px}
+.reveal{animation:stepin .22s ease-out both}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,115,232,.35)}70%{box-shadow:0 0 0 7px rgba(26,115,232,0)}100%{box-shadow:0 0 0 0 rgba(26,115,232,0)}}
+@keyframes sweep{0%{background-position:120% 0}100%{background-position:-120% 0}}
+@keyframes stepin{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.liveorb,.livebar,.reveal{animation:none}.reveal{opacity:1;transform:none}}
+
 #inputzone{padding:8px 14px 16px;border-top:1px solid var(--border)}
 #diffrow{display:flex;justify-content:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .db{padding:5px 13px;border-radius:var(--radius-pill);border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
@@ -136,12 +147,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
           <button class="chip" onclick="fill('2x + 5 = 13')">2x + 5 = 13</button>
           <button class="chip" onclick="fill('sqrt(144)')">√144</button>
           <button class="chip" onclick="fill('log2(32)')">log₂(32)</button>
-          <button class="chip" onclick="fill('sin(30)')">sin(30°)</button>
+          <button class="chip" onclick="fill('sin(30°)')">sin(30°)</button>
           <button class="chip" onclick="fill('треугольник 3 4 5')">Площадь △ 3,4,5</button>
           <button class="chip" onclick="fill('x^2 - 5x + 6 = 0')">x²−5x+6=0</button>
           <button class="chip" onclick="fill('20% от 350')">20% от 350</button>
           <button class="chip" onclick="fill('(2+3)*4 - 10/2')">Выражение</button>
-          <button class="chip" onclick="fill('cos(60)')">cos(60°)</button>
+          <button class="chip" onclick="fill('cos(60°)')">cos(60°)</button>
         </div>
       </div>
       <div id="msglist"></div>
@@ -177,7 +188,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 </div>
 
 <script>
-var diff='easy', hist=[], busy=false;
+var diff='easy', hist=[], busy=false, liveTimers=[];
 var DL={easy:'Начальная',medium:'Средняя',hard:'Старшая'};
 var TC={easy:'te',medium:'tm',hard:'th'};
 var userName='';
@@ -234,6 +245,8 @@ function kd(e){if(e.key==='Enter'){e.preventDefault();go();}}
 function upd(){document.getElementById('sndbtn').disabled=!document.getElementById('qi').value.trim()||busy;}
 
 function newChat(){
+  clearLiveTimers();
+  busy=false;
   document.getElementById('welcome').style.display='';
   document.getElementById('msglist').style.display='none';
   document.getElementById('msglist').innerHTML='';
@@ -284,6 +297,45 @@ function addBot(html,d){
   document.getElementById('msglist').appendChild(wrap);sc();
 }
 
+function clearLiveTimers(){
+  liveTimers.forEach(function(id){clearTimeout(id);});
+  liveTimers=[];
+}
+
+function later(fn,ms){
+  var id=setTimeout(function(){
+    liveTimers=liveTimers.filter(function(x){return x!==id;});
+    fn();
+  },ms);
+  liveTimers.push(id);
+}
+
+function addBotLive(html,d,done){
+  var wrap=document.createElement('div');wrap.className='mb';
+  wrap.innerHTML='<div class="mbav">М</div><div class="mbc livecalc"><span class="dottag '+TC[d]+'">'+DL[d]+'</span><div class="livehead"><span class="liveorb"></span><span class="livetxt">Разбираю запись…</span><span class="livebar"></span></div><div class="liveout"></div></div>';
+  var out=wrap.querySelector('.liveout'), status=wrap.querySelector('.livetxt'), bar=wrap.querySelector('.livebar'), orb=wrap.querySelector('.liveorb');
+  var tmp=document.createElement('div');tmp.innerHTML=html;
+  var chunks=Array.prototype.slice.call(tmp.childNodes).filter(function(n){return n.nodeType!==3||n.textContent.trim();});
+  document.getElementById('msglist').appendChild(wrap);sc();
+  if(!chunks.length){chunks=[document.createTextNode('Готово')];}
+  later(function(){status.textContent='Строю шаги решения…';},180);
+  chunks.forEach(function(node,i){
+    later(function(){
+      var item=node.cloneNode(true);
+      if(item.nodeType===1)item.classList.add('reveal');
+      else {var span=document.createElement('span');span.className='reveal';span.textContent=item.textContent;item=span;}
+      out.appendChild(item);sc();
+      status.textContent=i===chunks.length-1?'Почти готово…':'Шаг '+(i+1)+' из '+chunks.length;
+    },360+i*210);
+  });
+  later(function(){
+    status.textContent='Готово';
+    if(bar)bar.style.display='none';
+    if(orb)orb.style.animation='none';
+    if(done)done();
+  },420+chunks.length*210);
+}
+
 function sc(){var c=document.getElementById('chatzone');c.scrollTop=c.scrollHeight;}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -297,17 +349,18 @@ function go(){
   hist.push({q:q,diff:diff,t:t});
   addUser(q);addThink();
   var d=diff;
-  setTimeout(function(){
+  later(function(){
     removeThink();
-    addBot(solve(q,d),d);
-    busy=false;upd();
+    addBotLive(solve(q,d),d,function(){busy=false;upd();});
   },320);
 }
 
 function fmt(n){
-  if(typeof n!=='number'||isNaN(n))return '?';
-  if(Math.abs(n-Math.round(n))<1e-9)return String(Math.round(n));
-  return parseFloat(n.toFixed(8)).toString();
+  if(typeof n!=='number'||!isFinite(n))return '?';
+  if(Math.abs(n)<1e-12)n=0;
+  var rounded=Math.round(n);
+  if(Math.abs(n-rounded)<1e-10)return String(rounded);
+  return parseFloat(n.toFixed(12)).toString();
 }
 
 function steps(arr,ans){
@@ -316,100 +369,253 @@ function steps(arr,ans){
 }
 
 function errMsg(m){
-  return '<span class="errtxt"><i class="ti ti-alert-circle" aria-hidden="true"></i> '+m+'</span><div class="hint">Примеры: <code>2x+5=13</code> · <code>x^2-5x+6=0</code> · <code>log2(32)</code> · <code>sin(45)</code> · <code>треугольник 3 4 5</code> · <code>20% от 350</code></div>';
+  return '<span class="errtxt"><i class="ti ti-alert-circle" aria-hidden="true"></i> '+esc(m)+'</span><div class="hint">Проверь скобки и запись. Примеры: <code>2(x+3)=14</code> · <code>(x+1)^2=9</code> · <code>√144</code> · <code>sin(45°)</code> · <code>log2(32)</code> или <code>log(32;2)</code> · <code>20% от 350</code>. Уравнения поддерживаются до степени x²</div>';
+}
+
+function detectDegrees(raw){return /°|\bград|degree/i.test(String(raw));}
+function makeMathContext(raw){return {raw:String(raw),degrees:detectDegrees(raw),normalized:''};}
+
+var MATH_FUNCS={
+  sqrt:function(x){return Math.sqrt(x);}, abs:function(x){return Math.abs(x);}, ln:function(x){return Math.log(x);},
+  log:function(x){return Math.log10?Math.log10(x):Math.log(x)/Math.LN10;}, exp:function(x){return Math.exp(x);},
+  sin:function(x,ctx){return Math.sin(ctx.degrees?x*Math.PI/180:x);}, cos:function(x,ctx){return Math.cos(ctx.degrees?x*Math.PI/180:x);},
+  tan:function(x,ctx){return Math.tan(ctx.degrees?x*Math.PI/180:x);}, tg:function(x,ctx){return Math.tan(ctx.degrees?x*Math.PI/180:x);},
+  cot:function(x,ctx){return 1/Math.tan(ctx.degrees?x*Math.PI/180:x);}, ctg:function(x,ctx){return 1/Math.tan(ctx.degrees?x*Math.PI/180:x);}
+};
+
+function normalizeMathText(raw){
+  var s=String(raw).toLowerCase();
+  s=s.replace(/−|–|—/g,'-').replace(/×|·|∙/g,'*').replace(/÷/g,'/');
+  s=s.replace(/логарифм\s+([+-]?\d+(?:[.,]\d+)?)\s+по\s+основани[юя]\s+([+-]?\d+(?:[.,]\d+)?)/gi,'log$2($1)');
+  s=s.replace(/\blog\s*\(\s*([+-]?\d+(?:[.,]\d+)?)\s*[,;]\s*([+-]?\d+(?:[.,]\d+)?)\s*\)/gi,'log$2($1)');
+  s=s.replace(/(\d)\s*:\s*(\d)/g,'$1/$2').replace(/:/g,' ');
+  s=s.replace(/π/g,'pi').replace(/²/g,'^2').replace(/³/g,'^3').replace(/½/g,'(1/2)').replace(/¼/g,'(1/4)').replace(/¾/g,'(3/4)');
+  s=s.replace(/,/g,'.').replace(/°/g,'').replace(/градусов|градуса|градусы|градус|град\.?/g,'');
+  s=s.replace(/процентов|процента|процент/gi,'%').replace(/икс/g,'x');
+  s=s.replace(/плюс/g,'+').replace(/минус/g,'-').replace(/умножить на|умножить/g,'*').replace(/разделить на|делить на|поделить на/g,'/');
+  s=s.replace(/уравнение|реши|решить|вычисли|посчитай|найди значение|сколько будет|чему равно/gi,' ');
+  s=s.replace(/логарифм/gi,'log').replace(/корень из/gi,'sqrt');
+  s=s.replace(/√\s*\(/g,'sqrt(').replace(/√\s*([a-z]+|\d+(?:\.\d+)?)/g,'sqrt($1)');
+  s=s.replace(/\b(sqrt|sin|cos|tan|tg|ctg|cot|ln)\s*(\d+(?:\.\d+)?|pi|e|x)\b/g,'$1($2)');
+  s=s.replace(/\blog\s*_\s*(\d+(?:\.\d+)?)\s*\(/g,'log$1(');
+  return s.replace(/\s+/g,' ').trim();
+}
+
+function token(type,value,raw,extra){var o={type:type,value:value,raw:raw};if(extra)for(var k in extra)o[k]=extra[k];return o;}
+function tokenize(input){
+  var s=typeof input==='string'?normalizeMathText(input):input.normalized,t=[],i=0;
+  while(i<s.length){
+    var c=s[i];
+    if(/\s/.test(c)){i++;continue;}
+    if(/[0-9.]/.test(c)){
+      var st=i,dot=0; while(i<s.length&&/[0-9.]/.test(s[i])){if(s[i]==='.')dot++;i++;}
+      var raw=s.slice(st,i); if(raw==='.'||dot>1)throw new Error('число записано некорректно: '+raw);
+      t.push(token('num',parseFloat(raw),raw)); continue;
+    }
+    if(/[a-zа-я_]/i.test(c)){
+      var st2=i; while(i<s.length&&/[a-zа-я_0-9]/i.test(s[i]))i++;
+      var id=s.slice(st2,i),m=id.match(/^log_?(\d+(?:\.\d+)?)$/);
+      if(m){t.push(token('func','logbase',id,{base:parseFloat(m[1])}));continue;}
+      if(MATH_FUNCS[id])t.push(token('func',id,id));
+      else if(id==='pi'||id==='e')t.push(token('const',id,id));
+      else if(id==='x')t.push(token('var','x',id));
+      else t.push(token('word',id,id));
+      continue;
+    }
+    if('+-*/^()=%'.indexOf(c)>=0){t.push(token(c,c,c));i++;continue;}
+    throw new Error('символ «'+c+'» не является частью математической записи');
+  }
+  return t;
+}
+
+function Parser(tokens,ctx){this.t=tokens;this.i=0;this.ctx=ctx||{degrees:false};}
+Parser.prototype.peek=function(){return this.t[this.i];};
+Parser.prototype.eat=function(type){var p=this.peek();if(p&&p.type===type){this.i++;return p;}return null;};
+Parser.prototype.expect=function(type){var p=this.eat(type);if(!p)throw new Error(type===')'?'не хватает закрывающей скобки )':'ожидалось '+type);return p;};
+Parser.prototype.parse=function(){if(!this.t.length)throw new Error('я не вижу математического выражения');var n=this.expr();var p=this.peek();if(p){if(p.type==='word')throw new Error('не понимаю слово «'+p.raw+'» в математической части');throw new Error('лишний токен «'+p.raw+'»');}return n;};
+Parser.prototype.expr=function(){var n=this.term();while(this.peek()&&(this.peek().type==='+'||this.peek().type==='-')){var op=this.peek().type;this.i++;n={type:'bin',op:op,left:n,right:this.term()};}return n;};
+Parser.prototype.startsPrimary=function(p){return p&&(p.type==='num'||p.type==='var'||p.type==='const'||p.type==='func'||p.type==='(');};
+Parser.prototype.term=function(){var n=this.power();while(this.peek()){var p=this.peek();if(p.type==='*'||p.type==='/'){this.i++;n={type:'bin',op:p.type,left:n,right:this.power()};}
+  else if(this.startsPrimary(p)){n={type:'bin',op:'*',left:n,right:this.power(),implicit:true};}
+  else break;}return n;};
+Parser.prototype.power=function(){var n=this.unary();if(this.eat('^'))n={type:'bin',op:'^',left:n,right:this.power()};return n;};
+Parser.prototype.unary=function(){if(this.eat('+'))return this.unary();if(this.eat('-'))return {type:'unary',op:'-',arg:this.unary()};return this.postfix();};
+Parser.prototype.postfix=function(){var n=this.primary();while(this.eat('%'))n={type:'percent',arg:n};return n;};
+Parser.prototype.primary=function(){var p=this.peek();if(!p)throw new Error('выражение оборвалось: после операции нужен аргумент');
+  if(this.eat('num'))return {type:'num',value:p.value,raw:p.raw};
+  if(this.eat('var'))return {type:'var',name:'x'};
+  if(this.eat('const'))return {type:'num',value:p.value==='pi'?Math.PI:Math.E,raw:p.value};
+  if(this.eat('(')){var n=this.expr();this.expect(')');return n;}
+  if(p.type==='func'){this.i++;var arg;if(this.eat('(')){arg=this.expr();this.expect(')');}else arg=this.unary();return {type:'func',name:p.value,base:p.base,arg:arg};}
+  if(p.type==='word')throw new Error('не понимаю слово «'+p.raw+'» в математической части');
+  throw new Error('неожиданный токен «'+p.raw+'»');
+};
+
+function astText(n){
+  if(n.type==='num')return n.raw||fmt(n.value); if(n.type==='var')return 'x'; if(n.type==='percent')return astText(n.arg)+'%';
+  if(n.type==='unary')return '-'+astText(n.arg); if(n.type==='func')return (n.name==='logbase'?'log_'+fmt(n.base):n.name)+'('+astText(n.arg)+')';
+  if(n.type==='bin')return '('+astText(n.left)+' '+n.op+' '+astText(n.right)+')'; return '?';
+}
+function hasImplicitMul(n){return !!(n&&(n.implicit||(n.left&&hasImplicitMul(n.left))||(n.right&&hasImplicitMul(n.right))||(n.arg&&hasImplicitMul(n.arg))));}
+
+function safeNumber(v,what){if(typeof v!=='number'||!isFinite(v)||isNaN(v))throw new Error((what||'результат')+' не является допустимым числом');return v;}
+function evalAst(n,ctx){
+  if(n.type==='num')return n.value; if(n.type==='var')throw new Error('в выражении есть x — запиши его как уравнение с =');
+  if(n.type==='percent')return evalAst(n.arg,ctx)/100; if(n.type==='unary')return -evalAst(n.arg,ctx);
+  if(n.type==='func'){
+    var a=evalAst(n.arg,ctx),v;
+    if(n.name==='sqrt'&&a<0)throw new Error('корень из отрицательного числа не является действительным числом');
+    if((n.name==='ln'||n.name==='log'||n.name==='logbase')&&a<=0)throw new Error('логарифм определён только для положительного аргумента');
+    if(n.name==='logbase'){if(n.base<=0||Math.abs(n.base-1)<1e-12)throw new Error('основание логарифма должно быть > 0 и не равно 1');v=Math.log(a)/Math.log(n.base);} else v=MATH_FUNCS[n.name](a,ctx);
+    return safeNumber(v,n.name+'('+fmt(a)+')');
+  }
+  var l=evalAst(n.left,ctx),r=evalAst(n.right,ctx),v2;
+  if(n.op==='+')v2=l+r; else if(n.op==='-')v2=l-r; else if(n.op==='*')v2=l*r; else if(n.op==='/'){if(Math.abs(r)<1e-15)throw new Error('деление на ноль');v2=l/r;} else if(n.op==='^')v2=Math.pow(l,r);
+  return safeNumber(v2,'результат операции '+n.op);
+}
+
+function parseExpression(s,ctx){return new Parser(tokenize(s),ctx).parse();}
+function evalExpression(s,ctx){var ast=parseExpression(s,ctx);return {ast:ast,value:evalAst(ast,ctx)};}
+
+function poly(c0,c1,c2){return [c0||0,c1||0,c2||0];}
+function padd(a,b,k){k=k||1;return poly(a[0]+k*b[0],a[1]+k*b[1],a[2]+k*b[2]);}
+function pmul(a,b){var r=[0,0,0,0,0];for(var i=0;i<=2;i++)for(var j=0;j<=2;j++)r[i+j]+=a[i]*b[j];if(Math.abs(r[3])>1e-9||Math.abs(r[4])>1e-9)throw new Error('поддерживаются уравнения до второй степени');return poly(r[0],r[1],r[2]);}
+function pscale(a,k){if(Math.abs(k)<1e-15)throw new Error('деление на ноль');return poly(a[0]*k,a[1]*k,a[2]*k);}
+function astToPoly(n,ctx){
+  if(n.type==='num')return poly(n.value,0,0); if(n.type==='var')return poly(0,1,0);
+  if(n.type==='percent')return pscale(astToPoly(n.arg,ctx),0.01); if(n.type==='unary')return pscale(astToPoly(n.arg,ctx),-1);
+  if(n.type==='func')return poly(evalAst(n,ctx),0,0);
+  var a=astToPoly(n.left,ctx),b=astToPoly(n.right,ctx);
+  if(n.op==='+')return padd(a,b,1); if(n.op==='-')return padd(a,b,-1); if(n.op==='*')return pmul(a,b);
+  if(n.op==='/'){if(Math.abs(b[1])>1e-9||Math.abs(b[2])>1e-9)throw new Error('деление на выражение с x пока не поддержано');return pscale(a,1/b[0]);}
+  if(n.op==='^'){var exp=evalAst(n.right,ctx);if(Math.abs(exp-Math.round(exp))>1e-9||exp<0||exp>2)throw new Error('степень выражения с x должна быть 0, 1 или 2');if(exp===0)return poly(1,0,0);if(exp===1)return a;return pmul(a,a);}
+  throw new Error('неизвестная операция');
+}
+function cleanCoef(x){return Math.abs(x)<1e-10?0:x;}
+function polyLabel(c){c=c.map(cleanCoef);var parts=[];if(c[2])parts.push(fmt(c[2])+'x²');if(c[1])parts.push(fmt(c[1])+'x');if(c[0]||!parts.length)parts.push(fmt(c[0]));return parts.join(' + ').replace(/\+ -/g,'- ');}
+
+function solveRadicalEquation(left,right,ctx){
+  var sqrtSide=null,other=null;
+  if(left.type==='func'&&left.name==='sqrt'){sqrtSide=left;other=right;}
+  else if(right.type==='func'&&right.name==='sqrt'){sqrtSide=right;other=left;}
+  if(!sqrtSide)return null;
+  var otherValue=evalAst(other,ctx);
+  if(otherValue<0)throw new Error('квадратный корень не может быть равен отрицательному числу');
+  var p=padd(astToPoly(sqrtSide.arg,ctx),poly(otherValue*otherValue,0,0),-1).map(cleanCoef);
+  var ss=['Распознано уравнение с корнем: '+astText(sqrtSide)+' = '+astText(other),'Возводим обе части в квадрат: '+astText(sqrtSide.arg)+' = '+fmt(otherValue)+'²','Переносим всё в левую часть: '+polyLabel(p)+' = 0'];
+  var a=p[2],b=p[1],c=p[0];
+  if(Math.abs(a)<1e-10&&Math.abs(b)>1e-10){var x=-c/b;ss.push(fmt(b)+'x = '+fmt(-c));ss.push('x = '+fmt(x));return steps(ss,'x = '+fmt(x));}
+  if(Math.abs(a)<1e-10&&Math.abs(b)<1e-10)return steps(ss,Math.abs(c)<1e-10?'любое x':'решений нет');
+  var D=b*b-4*a*c;ss.push('D = b² − 4ac = '+fmt(D));
+  if(D< -1e-10)return steps(ss.concat('D < 0, действительных корней нет'),'действительных корней нет');
+  if(Math.abs(D)<1e-10){var x0=-b/(2*a);return steps(ss.concat('x = −b/(2a) = '+fmt(x0)),'x = '+fmt(x0));}
+  var sd=Math.sqrt(D),x1=(-b+sd)/(2*a),x2=(-b-sd)/(2*a);
+  return steps(ss.concat('√D = '+fmt(sd),'x₁ = '+fmt(x1),'x₂ = '+fmt(x2)),'x₁ = '+fmt(x1)+', x₂ = '+fmt(x2));
+}
+
+function solveEquation(q,ctx){
+  var parts=q.split('='); if(parts.length!==2)throw new Error('в уравнении должен быть ровно один знак =');
+  var left=parseExpression(parts[0],ctx),right=parseExpression(parts[1],ctx);
+  var radical=solveRadicalEquation(left,right,ctx); if(radical)return radical;
+  var p=padd(astToPoly(left,ctx),astToPoly(right,ctx),-1).map(cleanCoef);
+  var a=p[2],b=p[1],c=p[0],ss=['Разбираем левую и правую части без небезопасного выполнения кода.','Переносим всё в левую часть: '+polyLabel(p)+' = 0'];
+  if(Math.abs(a)<1e-10){
+    if(Math.abs(b)<1e-10)return steps(ss.concat(Math.abs(c)<1e-10?'Получилось тождество: верно при любом x.':'Получилось противоречие: решений нет.'),Math.abs(c)<1e-10?'любое x':'решений нет');
+    var x=-c/b; ss.push(fmt(b)+'x = '+fmt(-c)); ss.push('x = '+fmt(-c)+' / '+fmt(b)+' = '+fmt(x)); return steps(ss,'x = '+fmt(x));
+  }
+  ss.push('Это квадратное уравнение: a='+fmt(a)+', b='+fmt(b)+', c='+fmt(c));
+  var D=b*b-4*a*c; ss.push('D = b² − 4ac = '+fmt(b*b)+' − 4·'+fmt(a)+'·'+fmt(c)+' = '+fmt(D));
+  if(D< -1e-10){ss.push('D < 0, действительных корней нет');return steps(ss,'действительных корней нет');}
+  if(Math.abs(D)<1e-10){var x0=-b/(2*a);ss.push('D = 0, один корень: x = −b/(2a) = '+fmt(x0));return steps(ss,'x = '+fmt(x0));}
+  var sd=Math.sqrt(D),x1=(-b+sd)/(2*a),x2=(-b-sd)/(2*a);ss.push('√D = '+fmt(sd));ss.push('x₁ = (−b + √D)/(2a) = '+fmt(x1));ss.push('x₂ = (−b − √D)/(2a) = '+fmt(x2));return steps(ss,'x₁ = '+fmt(x1)+', x₂ = '+fmt(x2));
+}
+
+function nums(q){return (normalizeMathText(q).match(/[+-]?\d+(?:\.\d+)?/g)||[]).map(Number);}
+function solvePercent(q){
+  var s=normalizeMathText(q),m;
+  m=s.match(/^([+-]?\d+(?:\.\d+)?)\s*([+-])\s*([+-]?\d+(?:\.\d+)?)\s*%$/);
+  if(m){
+    var base0=+m[1],sign=m[2],p0=+m[3],factor=sign==='+'?1+p0/100:1-p0/100,r0=base0*factor;
+    return steps(['Процент рядом с +/− трактуем относительно предыдущего числа: '+fmt(p0)+'% от '+fmt(base0),fmt(base0)+' '+sign+' '+fmt(base0*p0/100)+' = '+fmt(r0)],fmt(r0));
+  }
+  m=s.match(/(?:увеличить|прибавить)\D*?([+-]?\d+(?:\.\d+)?)\s+(?:на\s*)?([+-]?\d+(?:\.\d+)?)\s*%/i);
+  if(!m)m=s.match(/(?:увеличить|прибавить)\s*(?:на)?\s*([+-]?\d+(?:\.\d+)?)\s*%\s*(?:от|для|число|значение)?\s*([+-]?\d+(?:\.\d+)?)/i);
+  if(m){
+    var base=+m[1],pp=+m[2];
+    if(s.indexOf('%')<s.lastIndexOf(String(m[2]))){base=+m[2];pp=+m[1];}
+    var rr=base*(1+pp/100);
+    return steps(['Увеличение на '+fmt(pp)+'%: умножаем на 1 + '+fmt(pp/100),fmt(base)+' · '+fmt(1+pp/100)+' = '+fmt(rr)],fmt(rr));
+  }
+  m=s.match(/(?:уменьшить|вычесть|скидк)\S*\D*?([+-]?\d+(?:\.\d+)?)\s+(?:на\s*)?([+-]?\d+(?:\.\d+)?)\s*%/i);
+  if(!m)m=s.match(/(?:уменьшить|вычесть|скидк)\S*\s*(?:на)?\s*([+-]?\d+(?:\.\d+)?)\s*%\s*(?:от|для|число|значение)?\s*([+-]?\d+(?:\.\d+)?)/i);
+  if(m){
+    var base2=+m[1],pp2=+m[2];
+    if(s.indexOf('%')<s.lastIndexOf(String(m[2]))){base2=+m[2];pp2=+m[1];}
+    var rr2=base2*(1-pp2/100);
+    return steps(['Уменьшение на '+fmt(pp2)+'%: умножаем на 1 − '+fmt(pp2/100),fmt(base2)+' · '+fmt(1-pp2/100)+' = '+fmt(rr2)],fmt(rr2));
+  }
+  m=s.match(/([+-]?\d+(?:\.\d+)?)\s*%\s*(?:от|из)\s*([+-]?\d+(?:\.\d+)?)/i)||s.match(/(?:найти|сколько)?\s*([+-]?\d+(?:\.\d+)?)\s*%\s+([+-]?\d+(?:\.\d+)?)/i);
+  if(m){var p=+m[1],n=+m[2],r=p*n/100;return steps(['Процент — это сотая доля: '+fmt(p)+'% = '+fmt(p/100),fmt(p/100)+' · '+fmt(n)+' = '+fmt(r)],fmt(r));}
+  if(/увеличить|уменьшить|скидк|прибавить/.test(s)&&/%/.test(s))return errMsg('Для процента нужно указать исходное число, например: «увеличить 350 на 10%».');
+  return null;
+}
+
+function hasRoot(words,roots){return words.some(function(w){return roots.some(function(r){return w.indexOf(r)===0;});});}
+function geometryInfo(q){
+  var s=normalizeMathText(q),words=s.split(/\s+/).filter(Boolean),a=nums(q);
+  return {
+    text:s, nums:a,
+    triangle:hasRoot(words,['треуголь','сторон']),
+    circle:hasRoot(words,['круг','окружност']),
+    rectangle:hasRoot(words,['прямоуголь','квадрат']),
+    square:hasRoot(words,['квадрат']),
+    pythagorean:hasRoot(words,['гипотенуз','пифагор','катет']),
+    perimeter:hasRoot(words,['периметр','длин']),
+    area:hasRoot(words,['площад'])
+  };
+}
+function solveGeometry(q){
+  var g=geometryInfo(q),a=g.nums,r;
+  if(g.triangle&&a.length>=3){
+    var x=a[0],y=a[1],z=a[2];
+    if(x<=0||y<=0||z<=0)return errMsg('Стороны треугольника должны быть положительными.');
+    if(x+y<=z||x+z<=y||y+z<=x)return errMsg('Такой треугольник не существует: нарушено неравенство треугольника.');
+    var hp=(x+y+z)/2,area=Math.sqrt(hp*(hp-x)*(hp-y)*(hp-z));
+    return steps(['Распознаны стороны треугольника: '+fmt(x)+', '+fmt(y)+', '+fmt(z),'Полупериметр p = ('+fmt(x)+' + '+fmt(y)+' + '+fmt(z)+') / 2 = '+fmt(hp),'Формула Герона: S = √(p(p−a)(p−b)(p−c))','S = '+fmt(area)],'площадь = '+fmt(area));
+  }
+  if(g.circle&&a.length>=1){
+    r=a[0]; if(r<=0)return errMsg('Радиус должен быть положительным.');
+    var areaC=Math.PI*r*r,len=2*Math.PI*r;
+    return steps(['Радиус r = '+fmt(r),'Площадь круга: S = πr² = '+fmt(areaC),'Длина окружности: C = 2πr = '+fmt(len)],g.perimeter?'C = '+fmt(len):'S = '+fmt(areaC));
+  }
+  if(g.rectangle&&a.length>=1){
+    var w=a[0],h=g.square&&a.length===1?w:a[1]; if(h===undefined)return null;
+    if(w<=0||h<=0)return errMsg('Стороны должны быть положительными.');
+    var ar=w*h,per=2*(w+h);
+    return steps(['Стороны: '+fmt(w)+' и '+fmt(h),'Площадь S = a·b = '+fmt(ar),'Периметр P = 2(a+b) = '+fmt(per)],g.perimeter?'P = '+fmt(per):'S = '+fmt(ar));
+  }
+  if(g.pythagorean&&a.length>=2){
+    var aa=a[0],bb=a[1]; if(aa<=0||bb<=0)return errMsg('Катеты должны быть положительными.');
+    var cc=Math.sqrt(aa*aa+bb*bb);
+    return steps(['Теорема Пифагора: c² = a² + b²','c = √('+fmt(aa)+'² + '+fmt(bb)+'²) = '+fmt(cc)],'c = '+fmt(cc));
+  }
+  return null;
 }
 
 function solve(raw){
-  var q=raw.trim();
-
-  var pct=q.match(/(\d+(?:[.,]\d+)?)\s*%\s*от\s*(\d+(?:[.,]\d+)?)/i);
-  if(pct){
-    var p=parseFloat(pct[1]),n=parseFloat(pct[2].replace(',','.'));
-    var r=(p/100)*n;
-    return steps(['Формула: (p ÷ 100) × n','('+fmt(p)+' ÷ 100) × '+fmt(n)+' = '+fmt(r)],''+fmt(r));
-  }
-
-  var her=q.match(/треуголь\S*\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)/i);
-  if(!her)her=q.match(/стороны?\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)/i);
-  if(her){
-    var a=parseFloat(her[1]),b=parseFloat(her[2]),c=parseFloat(her[3]);
-    var s2=(a+b+c)/2,d2=s2*(s2-a)*(s2-b)*(s2-c);
-    if(d2<0)return errMsg('Такой треугольник не существует');
-    var area=Math.sqrt(d2);
-    return steps(['Стороны: a='+a+', b='+b+', c='+c,'Полупериметр s = ('+a+'+'+b+'+'+c+') / 2 = '+fmt(s2),'Формула Герона: S = √(s·(s−a)·(s−b)·(s−c))','S = √('+fmt(s2)+'·'+fmt(s2-a)+'·'+fmt(s2-b)+'·'+fmt(s2-c)+')','S = '+fmt(area)],'Площадь = '+fmt(area));
-  }
-
-  var q2=q.match(/([+-]?\s*\d*(?:[.,]\d+)?)\s*x[\^²]2?\s*([+-]\s*\d+(?:[.,]\d+)?)\s*x\s*([+-]\s*\d+(?:[.,]\d+)?)\s*=\s*0/i);
-  if(!q2)q2=q.match(/x²\s*([+-]\s*\d+(?:[.,]\d+)?)\s*x\s*([+-]\s*\d+(?:[.,]\d+)?)\s*=\s*0/i);
-  if(q2){
-    var qa,qb,qc;
-    if(q2.length===4){
-      qa=parseFloat((q2[1].replace(/\s/g,'')||'1').replace(',','.').replace(/^[+]$/,'1').replace(/^[-]$/,'-1')||'1');
-      qb=parseFloat(q2[2].replace(/\s/g,'').replace(',','.'));
-      qc=parseFloat(q2[3].replace(/\s/g,'').replace(',','.'));
-    } else {
-      qa=1;qb=parseFloat(q2[1].replace(/\s/g,'').replace(',','.'));qc=parseFloat(q2[2].replace(/\s/g,'').replace(',','.'));
-    }
-    if(isNaN(qa))qa=1;
-    var D=qb*qb-4*qa*qc;
-    var ss=['Уравнение: '+fmt(qa)+'x² + ('+fmt(qb)+')x + '+fmt(qc)+' = 0','D = b²−4ac = ('+fmt(qb)+')²−4·'+fmt(qa)+'·'+fmt(qc)+' = '+fmt(D)];
-    if(D<0){ss.push('D < 0 — действительных корней нет');return stepsHtml(ss,'Корней нет');}
-    if(Math.abs(D)<1e-10){var x0=-qb/(2*qa);ss.push('D = 0 → x = −b/(2a) = '+fmt(x0));return stepsHtml(ss,'x = '+fmt(x0));}
-    var x1=(-qb+Math.sqrt(D))/(2*qa),x2=(-qb-Math.sqrt(D))/(2*qa);
-    ss.push('√D = √'+fmt(D)+' = '+fmt(Math.sqrt(D)));
-    ss.push('x₁ = (−('+fmt(qb)+')+'+fmt(Math.sqrt(D))+') / (2·'+fmt(qa)+') = '+fmt(x1));
-    ss.push('x₂ = (−('+fmt(qb)+')-'+fmt(Math.sqrt(D))+') / (2·'+fmt(qa)+') = '+fmt(x2));
-    return stepsHtml(ss,'x₁ = '+fmt(x1)+',  x₂ = '+fmt(x2));
-  }
-
-  var lin=q.match(/([+-]?\s*\d*(?:[.,]\d+)?)\s*x\s*([+-]\s*\d+(?:[.,]\d+)?)\s*=\s*([+-]?\s*\d+(?:[.,]\d+)?)/i);
-  if(lin){
-    var la=parseFloat((lin[1].replace(/\s/g,'')||'1').replace(',','.'));
-    var lb=parseFloat(lin[2].replace(/\s/g,'').replace(',','.'));
-    var lc=parseFloat(lin[3].replace(/\s/g,'').replace(',','.'));
-    if(isNaN(la))la=1;
-    var lx=(lc-lb)/la;
-    return steps([fmt(la)+'x + '+fmt(lb)+' = '+fmt(lc),fmt(la)+'x = '+fmt(lc-lb),'x = '+fmt(lc-lb)+' ÷ '+fmt(la)+' = '+fmt(lx)],'x = '+fmt(lx));
-  }
-
-  var logm=q.match(/log\s*(\d+)\s*[\(\s]\s*(\d+(?:[.,]\d+)?)\s*\)?/i);
-  if(logm){
-    var lb2=parseFloat(logm[1]),ln2=parseFloat(logm[2].replace(',','.'));
-    var lr=Math.log(ln2)/Math.log(lb2);
-    return steps(['log'+lb2+'('+ln2+')','= ln('+ln2+') ÷ ln('+lb2+')','= '+fmt(Math.log(ln2))+' ÷ '+fmt(Math.log(lb2)),'= '+fmt(lr)],'log'+lb2+'('+ln2+') = '+fmt(lr));
-  }
-
-  var sqm=q.match(/sqrt\s*[\(\s]\s*(\d+(?:[.,]\d+)?)\s*\)?/i)||q.match(/√\s*(\d+(?:[.,]\d+)?)/);
-  if(sqm){
-    var sn=parseFloat(sqm[1].replace(',','.'));
-    var sr=Math.sqrt(sn);
-    return steps(['√'+fmt(sn),'= '+fmt(sr)],'√'+fmt(sn)+' = '+fmt(sr));
-  }
-
-  var trm=q.match(/(sin|cos|tan|tg|ctg|cot)\s*[\(\s]\s*(\d+(?:[.,]\d+)?)\s*\)?/i)||q.match(/(sin|cos|tan|tg|ctg|cot)\s+(\d+(?:[.,]\d+)?)/i);
-  if(trm){
-    var fn=trm[1].toLowerCase(),deg=parseFloat(trm[2].replace(',','.'));
-    var rad=deg*Math.PI/180,rv;
-    if(fn==='sin')rv=Math.sin(rad);
-    else if(fn==='cos')rv=Math.cos(rad);
-    else if(fn==='tan'||fn==='tg')rv=Math.tan(rad);
-    else rv=1/Math.tan(rad);
-    return steps([fn+'('+deg+'°)','Перевод: '+fmt(deg)+'° → '+fmt(parseFloat(rad.toFixed(6)))+' рад','= '+fmt(rv)],fn+'('+deg+'°) = '+fmt(rv));
-  }
-
-  var expr=q.replace(/\^/g,'**').replace(/×/g,'*').replace(/÷/g,'/').replace(/,/g,'.').replace(/²/g,'**2');
+  var q=raw.trim(),ctx=makeMathContext(raw); ctx.normalized=normalizeMathText(q);
   try{
-    var ev=Function('"use strict";return('+expr+')')();
-    if(typeof ev==='number'&&isFinite(ev)){
-      return steps([q+' = '+fmt(ev)],fmt(ev));
-    }
-  }catch(e){}
-
-  return errMsg('Не удалось распознать выражение');
-}
-
-function stepsHtml(arr,ans){
-  return arr.map(function(x,i){return '<div class="steprow"><b>Шаг '+(i+1)+'.</b> '+esc(x)+'</div>';}).join('')+'<div class="ansrow"><i class="ti ti-check" aria-hidden="true"></i> Ответ: '+esc(ans)+'</div>';
+    if(!q)return errMsg('Введите пример, уравнение или задачу.');
+    var pct=solvePercent(q); if(pct)return pct;
+    var geom=solveGeometry(q); if(geom)return geom;
+    if(q.indexOf('=')>=0)return solveEquation(ctx.normalized,ctx);
+    var res=evalExpression(ctx,ctx),val=res.value;
+    var explain=['Нормализуем запись: '+ctx.normalized,'Разбираем выражение на токены, AST, функции и скобки: '+astText(res.ast)];
+    if(hasImplicitMul(res.ast))explain.push('Неявное умножение читается как обычное умножение: например 2x = 2·x, 2(pi+1) = 2·(pi+1).');
+    if(/[a-zа-я√π%°]/i.test(q))explain.push('Функции, константы, проценты и углы вычисляются безопасным парсером. Режим углов: '+(ctx.degrees?'градусы':'радианы')+'.');
+    explain.push(astText(res.ast)+' = '+fmt(val));
+    return steps(explain,fmt(val));
+  }catch(e){return errMsg('Не удалось решить запрос: '+e.message);}
 }
 
 initName();
